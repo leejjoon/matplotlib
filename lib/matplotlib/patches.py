@@ -1535,7 +1535,8 @@ def _pprint_styles(_styles, leadingspace=2):
         args, varargs, varkw, defaults =  inspect.getargspec(cls.__init__)
         if defaults:
             args = [(argname, argdefault) \
-                    for argname, argdefault in zip(args[1:], defaults)]
+                    for argname, argdefault in zip(args[-len(defaults):],
+                                                   defaults)]
         else:
             args = None
 
@@ -1651,10 +1652,11 @@ class BoxStyle(_Style):
         # w/o arguments, i.e., all its argument (except self) must have
         # the default values.
 
-        def __init__(self):
+        def __init__(self, aspect=None):
             """
             initializtion.
             """
+            self._aspect = aspect
             super(BoxStyle._Base, self).__init__()
 
 
@@ -1686,6 +1688,17 @@ class BoxStyle(_Style):
             # The __call__ method is a thin wrapper around the transmute method
             # and take care of the aspect.
 
+            if self._aspect is not None:
+                aspect = self._aspect
+                if height < width * aspect:
+                    new_height = width * aspect
+                    y0 -= .5*(new_height - height)
+                    height = new_height
+                else:
+                    new_width = height / aspect
+                    x0 -= .5*(new_width - width)
+                    width = new_width
+
             if aspect_ratio is not None:
                 # Squeeze the given height by the aspect_ratio
                 y0, height = y0/aspect_ratio, height/aspect_ratio
@@ -1705,14 +1718,14 @@ class BoxStyle(_Style):
         A simple square box.
         """
 
-        def __init__(self, pad=0.3):
+        def __init__(self, pad=0.3, **kwargs):
             """
              *pad*
                 amount of padding
             """
 
             self.pad = pad
-            super(BoxStyle.Square, self).__init__()
+            super(BoxStyle.Square, self).__init__(**kwargs)
 
         def transmute(self, x0, y0, width, height, mutation_size):
 
@@ -1813,7 +1826,7 @@ class BoxStyle(_Style):
         A box with round corners.
         """
 
-        def __init__(self, pad=0.3, rounding_size=None):
+        def __init__(self, pad=0.3, rounding_size=None, **kwargs):
             """
             *pad*
               amount of padding
@@ -1823,7 +1836,7 @@ class BoxStyle(_Style):
             """
             self.pad = pad
             self.rounding_size = rounding_size
-            super(BoxStyle.Round, self).__init__()
+            super(BoxStyle.Round, self).__init__(**kwargs)
 
         def transmute(self, x0, y0, width, height, mutation_size):
 
@@ -1879,7 +1892,7 @@ class BoxStyle(_Style):
         Another box with round edges.
         """
 
-        def __init__(self, pad=0.3, rounding_size=None):
+        def __init__(self, pad=0.3, rounding_size=None, **kwargs):
             """
             *pad*
               amount of padding
@@ -1890,7 +1903,7 @@ class BoxStyle(_Style):
 
             self.pad = pad
             self.rounding_size = rounding_size
-            super(BoxStyle.Round4, self).__init__()
+            super(BoxStyle.Round4, self).__init__(**kwargs)
 
         def transmute(self, x0, y0, width, height, mutation_size):
 
@@ -2049,6 +2062,38 @@ class BoxStyle(_Style):
             return path
 
     _style_list["roundtooth"] = Roundtooth
+
+
+    class EllipseStyle(_Base):
+        """
+        A simple Ellipse.
+        """
+
+        def __init__(self, pad=0.3, **kwargs):
+
+            self.pad = pad
+            super(BoxStyle.EllipseStyle, self).__init__(**kwargs)
+
+        def transmute(self, x0, y0, width, height, mutation_size):
+
+            # padding
+            pad = mutation_size * self.pad
+
+            cx, cy = x0+.5*width, y0+.5*height # center
+
+            # radii with padding added.
+            r_x, r_y = .5*width + pad, .5*height + pad
+
+            cir_path = Path.unit_circle()
+            vertices = 2**.5 * np.array([r_x, r_y]) * cir_path.vertices + (cx, cy)
+
+            # a path of the circle
+            path = Path(vertices, cir_path.codes)
+
+            return path
+
+    _style_list["ellipse"] = EllipseStyle
+
 
     if __doc__: # __doc__ could be None if -OO optimization is enabled
         __doc__ = cbook.dedent(__doc__) % \
@@ -3683,7 +3728,7 @@ class FancyArrowPatch(Patch):
         dpi_cor is currently used for linewidth-related things and
         shink factor. Mutation scale is not affected by this.
         """
-        
+
         self._dpi_cor = dpi_cor
 
     def get_dpi_cor(self):
@@ -3691,10 +3736,10 @@ class FancyArrowPatch(Patch):
         dpi_cor is currently used for linewidth-related things and
         shink factor. Mutation scale is not affected by this.
         """
-        
+
         return self._dpi_cor
 
-        
+
     def set_positions(self, posA, posB):
         """ set the begin end end positions of the connecting
         path. Use current vlaue if None.
@@ -3892,7 +3937,7 @@ class FancyArrowPatch(Patch):
 
         # FIXME : dpi_cor is for the dpi-dependecy of the
         # linewidth. There could be room for improvement.
-        # 
+        #
         #dpi_cor = renderer.points_to_pixels(1.)
         self.set_dpi_cor(renderer.points_to_pixels(1.))
         path, fillable = self.get_path_in_displaycoord()
@@ -4154,7 +4199,7 @@ class ConnectionPatch(FancyArrowPatch):
         """
 
         dpi_cor = self.get_dpi_cor()
-        
+
         x, y = self.xy1
         posA = self._get_xy(x, y, self.coords1, self.axesA)
 
