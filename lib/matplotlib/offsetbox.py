@@ -272,6 +272,7 @@ class PackerBase(OffsetBox):
         self._children = children
 
 
+
 class VPacker(PackerBase):
     """
     The VPacker has its children packed vertically. It automatically
@@ -404,6 +405,114 @@ class HPacker(PackerBase):
                xdescent + pad, ydescent + pad, \
                zip(xoffsets, yoffsets)
 
+
+
+
+class PaddedBox(OffsetBox):
+    def __init__(self, child, pad=None, draw_frame=False, patch_attrs=None):
+        """
+        *pad* : boundary pad
+
+        .. note::
+          *pad* need to given in points and will be
+          scale with the renderer dpi, while *width* and *hight*
+          need to be in pixels.
+        """
+
+        super(PaddedBox, self).__init__()
+
+        self.pad = pad
+        self._children = [child]
+        
+        self.patch = FancyBboxPatch(
+            xy=(0.0, 0.0), width=1., height=1.,
+            facecolor='w', edgecolor='k',
+            mutation_scale=1, #self.prop.get_size_in_points(),
+            snap=True
+            )
+
+        self.patch.set_boxstyle("square",pad=0)
+
+        if patch_attrs is not None:
+            self.patch.ipdate(patch_attrs)
+        
+        self._drawFrame =  draw_frame
+
+
+    def get_extent_offsets(self, renderer):
+        """
+        update offset of childrens and return the extents of the box
+        """
+
+        dpicor = renderer.points_to_pixels(1.)
+        pad = self.pad * dpicor
+
+        w, h, xd, yd = self._children[0].get_extent(renderer)
+
+        return w + 2*pad, h + 2*pad, \
+               xd+pad, yd+pad, \
+               [(0, 0)]
+
+        
+        #whd_list = [c.get_extent(renderer) for c in self.get_visible_children()]
+        #whd_list = [(w, h, xd, (h-yd)) for w, h, xd, yd in whd_list]
+
+
+        #wd_list = [(w, xd) for w, h, xd, yd in whd_list]
+        # width, xdescent, xoffsets = _get_aligned_offsets(wd_list,
+        #                                                  self.width,
+        #                                                  self.align)
+
+        # pack_list = [(h, yd) for w,h,xd,yd in whd_list]
+        # height, yoffsets_ = _get_packed_offsets(pack_list, self.height,
+        #                                         sep, self.mode)
+
+        # yoffsets = yoffsets_  + [yd for w,h,xd,yd in whd_list]
+        # ydescent = height - yoffsets[0]
+        # yoffsets = height - yoffsets
+
+        # #w, h, xd, h_yd = whd_list[-1]
+        # yoffsets = yoffsets - ydescent
+
+
+        # return width + 2*pad, height + 2*pad, \
+        #        xdescent+pad, ydescent+pad, \
+        #        zip(xoffsets, yoffsets)
+
+    def draw(self, renderer):
+        """
+        Update the location of children if necessary and draw them
+        to the given *renderer*.
+        """
+
+        width, height, xdescent, ydescent, offsets = self.get_extent_offsets(renderer)
+
+        px, py = self.get_offset(width, height, xdescent, ydescent, renderer)
+
+        for c, (ox, oy) in zip(self.get_visible_children(), offsets):
+            c.set_offset((px+ox, py+oy))
+
+        self.draw_frame(renderer)
+        
+        for c in self.get_visible_children():
+            c.draw(renderer)
+
+        #bbox_artist(self, renderer, fill=False, props=dict(pad=0.))
+
+    def update_frame(self, bbox, fontsize=None):
+            self.patch.set_bounds(bbox.x0, bbox.y0,
+                                  bbox.width, bbox.height)
+
+            if fontsize:
+                self.patch.set_mutation_scale(fontsize)
+
+    def draw_frame(self, renderer):
+        if self._drawFrame:
+            # update the location and size of the legend
+            bbox = self.get_window_extent(renderer)
+            self.update_frame(bbox, fontsize=1)
+            self.patch.set_ec("r")
+            self.patch.draw(renderer)
 
 
 class DrawingArea(OffsetBox):
@@ -1576,11 +1685,14 @@ if __name__ == "__main__":
                            origin=None,
                            **kwargs
                            )
-    ann = AnnotationBbox(myimage2, (0.5, 0.5),
+
+    myimage3 = PaddedBox(myimage2, pad=5, draw_frame=True)
+
+    ann = AnnotationBbox(myimage3, (0.5, 0.5),
                          xybox=(30, 30),
                          xycoords='data',
                          boxcoords="offset points",
-                         frameon=True, pad=0.4,  # BboxPatch
+                         frameon=True, pad=0.,  # BboxPatch
                          bboxprops=dict(boxstyle="round", fc="y"),
                          fontsize=None,
                          arrowprops=dict(arrowstyle="->"),
