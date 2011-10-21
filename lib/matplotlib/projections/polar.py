@@ -17,6 +17,13 @@ from matplotlib.transforms import Affine2D, Affine2DBase, Bbox, \
     ScaledTranslation, blended_transform_factory, BboxTransformToMaxOnly
 import matplotlib.spines as mspines
 
+from projection import ProjectionBase
+
+class PolarProjection(ProjectionBase):
+    def get_axes_class_arguments(self):
+        return PolarAxes, dict()
+
+
 class PolarAxes(Axes):
     """
     A polar graph projection, where the input dimensions are *theta*, *r*.
