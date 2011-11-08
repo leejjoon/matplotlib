@@ -628,7 +628,21 @@ def test_markevery_line():
     ax.plot(x, y, '-+', markevery=(5, 20), label='mark every 5 starting at 10')
     ax.legend()
 
+def test_annotation_failure():
+    """See issue #566"""
+    import cStringIO
+    plt.plot([1, 2, 3, 4], [0, -1, -2, 8])
+    plt.annotate("Blah", xy=(2, 2), xytext=(-20,-20),
+                 textcoords='offset points',
+                 bbox=dict(boxstyle='round,pad=0.5'),
+                 arrowprops=dict(arrowstyle='fancy',
+                connectionstyle='arc3,rad=0'))
+
+    plt.savefig(cStringIO.StringIO())
+
 
 if __name__=='__main__':
     import nose
     nose.runmodule(argv=['-s','--with-doctest'], exit=False)
+
+
