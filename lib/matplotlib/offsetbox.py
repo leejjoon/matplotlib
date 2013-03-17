@@ -1198,7 +1198,7 @@ class OffsetImage(OffsetBox):
         zoom = self.get_zoom()
         data = self.get_data()
         ny, nx = data.shape[:2]
-        w, h = nx * zoom, ny * zoom
+        w, h = nx * zoom*dpi_cor, ny * zoom*dpi_cor
 
         return w, h, 0, 0
 
@@ -1209,6 +1209,9 @@ class OffsetImage(OffsetBox):
         self.image.draw(renderer)
         #bbox_artist(self, renderer, fill=False, props=dict(pad=0.))
 
+    def set_axes(self, ax):
+        self.image.set_axes(ax)
+        super(OffsetImage, self).set_axes(ax)
 
 class AnnotationBbox(martist.Artist, _AnnotationBase):
     """
@@ -1305,6 +1308,10 @@ class AnnotationBbox(martist.Artist, _AnnotationBase):
             self.arrow_patch.set_figure(fig)
         self.offsetbox.set_figure(fig)
         martist.Artist.set_figure(self, fig)
+
+    def set_axes(self, ax):
+        self.offsetbox.set_axes(ax)
+        martist.Artist.set_axes(self, ax)
 
     def set_fontsize(self, s=None):
         """

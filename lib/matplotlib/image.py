@@ -136,16 +136,29 @@ class _AxesImageBase(martist.Artist, cm.ScalarMappable):
     def make_image(self, magnification=1.0):
         raise RuntimeError('The make_image method must be overridden.')
 
-    def _get_unsampled_image(self, A, image_extents, viewlim):
+    def _slice_image(self, A, image_extents, viewlim):
         """
-        convert numpy array A with given extents ([x1, x2, y1, y2] in
-        data coordinate) into the Image, given the viewlim (should be a
-        bbox instance).  Image will be clipped if the extents is
-        significantly larger than the viewlim.
+        Given the extents of the image and its view-limits (in same
+        coordinate), retruns xmin, ymin, dxintv, dyintv, xslice, and
+        yslice.  If the image extents is signficantly larger than
+        view-limits, a slice of image is calculated and the other
+        return values will be adjusted accordingly.
+
+        xmin, ymin : lower-left position of the image
+        dxintv, dyintv : width and height.
+        xslice, yslice : slice that will be applied to A
+
         """
         xmin, xmax, ymin, ymax = image_extents
         dxintv = xmax-xmin
         dyintv = ymax-ymin
+
+        numrows, numcols = A.shape[:2]
+        if viewlim is None:
+            xslice = slice(0, numcols)
+            yslice = slice(0, numrows)
+
+            return xmin, ymin, dxintv, dyintv, xslice, yslice
 
         # the viewport scale factor
         if viewlim.width == 0.0 and dxintv == 0.0:
@@ -156,7 +169,6 @@ class _AxesImageBase(martist.Artist, cm.ScalarMappable):
             sy = 1.0
         else:
             sy = dyintv/viewlim.height
-        numrows, numcols = A.shape[:2]
         if sx > 2:
             x0 = (viewlim.x0-xmin)/dxintv * numcols
             ix0 = max(0, int(x0 - self._filterrad))
@@ -188,6 +200,13 @@ class _AxesImageBase(martist.Artist, cm.ScalarMappable):
         else:
             yslice = slice(0, numrows)
 
+        return xmin, ymin, dxintv, dyintv, xslice, yslice
+
+    def _get_cached_image(self, A, xslice, yslice):
+        """
+        If xslice and yslice is samce as old ones, return caches image.
+        Otherwise, return a new image after updating the cache.
+        """
         if xslice != self._oldxslice or yslice != self._oldyslice:
             self._imcache = None
             self._oldxslice = xslice
@@ -222,7 +241,22 @@ class _AxesImageBase(martist.Artist, cm.ScalarMappable):
         else:
             im = self._imcache
 
-        return im, xmin, ymin, dxintv, dyintv, sx, sy
+        return im
+
+    def _get_unsampled_image(self, A, image_extents, viewlim):
+        """
+        convert numpy array A with given extents ([x1, x2, y1, y2] in
+        data coordinate) into the Image, given the viewlim (should be a
+        bbox instance).  Image will be clipped if the extents is
+        significantly larger than the viewlim.
+        """
+
+        xmin, ymin, dxintv, dyintv, xslice, yslice = \
+              self._slice_image(A, image_extents, viewlim)
+
+        im = self._get_cached_image(A, xslice, yslice)
+
+        return im, xmin, ymin, dxintv, dyintv
 
     @staticmethod
     def _get_rotate_and_skew_transform(x1, y1, x2, y2, x3, y3):
@@ -267,7 +301,7 @@ class _AxesImageBase(martist.Artist, cm.ScalarMappable):
         # A straight-forward way is to use the non-affine part of the
         # original transform for conversion to the ic.
 
-        # firs, convert the image extent to the ic
+        # first, convert the image extent to the ic
         x_llc, x_trc, y_llc, y_trc = self.get_extent()
 
         xy = trans.transform(np.array([(x_llc, y_llc),
@@ -304,11 +338,11 @@ class _AxesImageBase(martist.Artist, cm.ScalarMappable):
                                                      (x1, y2)]))
         x1_, x2_ = min(xy_[:,0]), max(xy_[:,0])
         y1_, y2_ = min(xy_[:,1]), max(xy_[:,1])
-        viewLim_in_ic =  Bbox.from_extents(x1_, y1_, x2_, y2_)
+        viewLim_in_ic =  Bbox.from_extents(x1_, x2_, y1_, y2_)
 
 
         # get the image, sliced if necessary. This is done in the ic.
-        im, xmin, ymin, dxintv, dyintv, sx, sy = \
+        im, xmin, ymin, dxintv, dyintv = \
             self._get_unsampled_image(self._A, extent_in_ic, viewLim_in_ic)
 
         if im is None: return # I'm not if this check is required. -JJL
@@ -380,7 +414,6 @@ class _AxesImageBase(martist.Artist, cm.ScalarMappable):
             xmin,xmax = xmax,xmin
         if ymin > ymax:
             ymin,ymax = ymax,ymin
-        #print x, y, xmin, xmax, ymin, ymax
         if x is not None and y is not None:
             inside = x>=xmin and x<=xmax and y>=ymin and y<=ymax
         else:
@@ -575,7 +608,7 @@ class AxesImage(_AxesImageBase):
         transformed_viewLim = mtransforms.TransformedBbox(self.axes.viewLim,
                                                           trans)
 
-        im, xmin, ymin, dxintv, dyintv, sx, sy = \
+        im, xmin, ymin, dxintv, dyintv = \
             self._get_unsampled_image(self._A, [_x1, _x2, _y1, _y2],
                                       transformed_viewLim)
 
@@ -611,7 +644,10 @@ class AxesImage(_AxesImageBase):
         # resize viewport to display
         rx = widthDisplay / numcols
         ry = heightDisplay / numrows
-        im.apply_scaling(rx*sx, ry*sy)
+        #im.apply_scaling(rx*sx, ry*sy)
+        im.apply_scaling(rx*dxintv/transformed_viewLim.width,
+                         ry*dyintv/transformed_viewLim.height)
+
         im.resize(int(widthDisplay+0.5), int(heightDisplay+0.5),
                   norm=self._filternorm, radius=self._filterrad)
         return im
@@ -655,7 +691,6 @@ class AxesImage(_AxesImageBase):
             return self._extent
         else:
             sz = self.get_size()
-            #print 'sz', sz
             numrows, numcols = sz
             if self.origin == 'upper':
                 return (-0.5, numcols-0.5, numrows-0.5, -0.5)
@@ -880,9 +915,6 @@ class PcolorImage(martist.Artist, cm.ScalarMappable):
             y = np.asarray(y, np.float64).ravel()
 
         if A.shape[:2] != (y.size-1, x.size-1):
-            print(A.shape)
-            print(y.size)
-            print(x.size)
             raise ValueError("Axes don't match array shape")
         if A.ndim not in [2, 3]:
             raise ValueError("A must be 2D or 3D")
@@ -945,7 +977,6 @@ class FigureImage(martist.Artist, cm.ScalarMappable):
         if callable(self._contains): return self._contains(self,mouseevent)
         xmin, xmax, ymin, ymax = self.get_extent()
         xdata, ydata = mouseevent.x, mouseevent.y
-        #print xdata, ydata, xmin, xmax, ymin, ymax
         if xdata is not None and ydata is not None:
             inside = xdata>=xmin and xdata<=xmax and ydata>=ymin and ydata<=ymax
         else:
@@ -1078,7 +1109,7 @@ class BboxImage(_AxesImageBase):
 
     def contains(self, mouseevent):
         """Test whether the mouse event occured within the image."""
-        if callable(self._contains): 
+        if callable(self._contains):
             return self._contains(self, mouseevent)
 
         if not self.get_visible():# or self.get_figure()._renderer is None:
@@ -1096,31 +1127,18 @@ class BboxImage(_AxesImageBase):
 
         return self._A.shape[:2]
 
-    def make_image(self, renderer, magnification=1.0):
+    def make_image_of_extents(self, extents, magnification=1.0):
+        """
+        extents = l, b, r, t
+        """
         if self._A is None:
             raise RuntimeError('You must first set the image array or the image attribute')
 
-        if self._imcache is None:
-            if self._A.dtype == np.uint8 and len(self._A.shape) == 3:
-                im = _image.frombyte(self._A, 0)
-                im.is_grayscale = False
-            else:
-                if self._rgbacache is None:
-                    x = self.to_rgba(self._A, bytes=True)
-                    self._rgbacache = x
-                else:
-                    x = self._rgbacache
-                im = _image.frombyte(x, 0)
-                if len(self._A.shape) == 2:
-                    im.is_grayscale = self.cmap.is_gray()
-                else:
-                    im.is_grayscale = False
-            self._imcache = im
 
-            if self.origin=='upper':
-                im.flipud_in()
-        else:
-            im = self._imcache
+        numrows, numcols = self._A.shape[:2]
+        xslice = slice(0, numcols)
+        yslice = slice(0, numrows)
+        im = self._get_cached_image(self._A, xslice, yslice)
 
         # image input dimensions
         im.reset_matrix()
@@ -1129,7 +1147,7 @@ class BboxImage(_AxesImageBase):
 
         im.set_resample(self._resample)
 
-        l, b, r, t = self.get_window_extent(renderer).extents #bbox.extents
+        l, b, r, t = extents
         widthDisplay = round(r) - round(l)
         heightDisplay = round(t) - round(b)
         widthDisplay *= magnification
@@ -1151,19 +1169,94 @@ class BboxImage(_AxesImageBase):
                   norm=self._filternorm, radius=self._filterrad)
         return im
 
+    def _check_unsampled_image(self, renderer):
+        """
+        return True if the image is better to be drawn unsampled.
+        """
+        if self.get_interpolation() == "none":
+            if renderer.option_scale_image():
+                return True
+            else:
+                warnings.warn("The backend (%s) does not support interpolation='none'. The image will be interpolated with 'nearest` mode." % renderer.__class__)
+
+        return False
+
+    def _draw_unsampled_image(self, renderer, gc):
+        """
+        draw unsampled image. The renderer should support a draw_image method
+        with scale parameter.
+        """
+
+        # No affine transform in supported yet.
+        x1, y1, x2, y2 = self.get_window_extent(renderer).extents
+
+        extent_in_ic = [x1, x2, y1, y2]
+
+        # get the image, sliced if necessary. This is done in the ic.
+        im, xmin, ymin, dxintv, dyintv = \
+            self._get_unsampled_image(self._A, extent_in_ic, None)
+
+        if im is None: return # I'm not if this check is required. -JJL
+
+        fc = self.axes.patch.get_facecolor()
+        bg = mcolors.colorConverter.to_rgba(fc, 0)
+        im.set_bg( *bg)
+
+        # image input dimensions
+        im.reset_matrix()
+        numrows, numcols = im.get_size()
+
+        im.resize(numcols, numrows) # just to create im.bufOut that
+                                    # is required by backends. There
+                                    # may be better solution -JJL
+
+        im._url = self.get_url()
+        im._gid = self.get_gid()
+
+        renderer.draw_image(gc, xmin, ymin, im, dxintv, dyintv,
+                            IdentityTransform())
+
+
     @allow_rasterization
     def draw(self, renderer, *args, **kwargs):
         if not self.get_visible(): return
         # todo: we should be able to do some cacheing here
-        image_mag = renderer.get_image_magnification()
-        im = self.make_image(renderer, image_mag)
-        l, b, r, t = self.get_window_extent(renderer).extents
+
         gc = renderer.new_gc()
         self._set_gc_clip(gc)
         gc.set_alpha(self.get_alpha())
-        #gc.set_clip_path(self.get_clip_path())
-        renderer.draw_image(gc, round(l), round(b), im)
+
+        if self._check_unsampled_image(renderer):
+            self._draw_unsampled_image(renderer, gc)
+        else:
+            if self._image_skew_coordinate is not None:
+                warnings.warn("Image will not be shown correctly with this backend.")
+
+            extents = self.get_window_extent(renderer).extents #bbox.extents
+            im = self.make_image_of_extents(extents,
+                                  renderer.get_image_magnification())
+            if im is None:
+                return
+            im._url = self.get_url()
+            im._gid = self.get_gid()
+            l, b = extents[:2]
+            renderer.draw_image(gc, l, b, im)
         gc.restore()
+
+        # image_mag = renderer.get_image_magnification()
+        # im = self.make_image(renderer, image_mag)
+        # l, b, r, t = self.get_window_extent(renderer).extents
+        # gc = renderer.new_gc()
+        # self._set_gc_clip(gc)
+        # gc.set_alpha(self.get_alpha())
+        # #gc.set_clip_path(self.get_clip_path())
+        # renderer.draw_image(gc, round(l), round(b), im)
+        # gc.restore()
+
+    # def get_extent(self):
+    #     """Get the image extent: left, right, bottom, top"""
+    #     l, b, w, h = self.get_window_extent(renderer).bounds
+    #     return self._extent
 
 
 def imread(fname, format=None):
