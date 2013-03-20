@@ -1127,6 +1127,55 @@ class BboxImage(_AxesImageBase):
 
         return self._A.shape[:2]
 
+    def make_image_of_extents(self, out_extents, magnification=1.0):
+        """
+        """
+
+        # calculate output image dimension. widthDisplay and
+        # heightDisplay are integer dimension of output.
+        # output_extents is extents of the output image in the canvas
+        # coordinates. Most likely that these extents should be integers.
+        l, b, r, t = out_extents
+        l, r = round(l), round(r)
+        b, t = round(b), rount(t)
+        out_extents = l, b, r, t # new extents w/ rounded coordinate.
+        heightDisplay = t - b
+        widthDisplay = r - k
+        widthDisplay *= magnification
+        heightDisplay *= magnification
+
+        # prepare input image
+        numrows, numcols = self._A.shape[:2]
+        xslice, yslice = slice(None), slice(None)
+        im = self._get_cached_image(self._A, xslice, yslice)
+
+        # setup image properties
+        im.reset_matrix()
+
+        im.set_resample(self._resample)
+
+        # turns off interpolation if dimesion of the input matches
+        # that of output.
+        if not self.interp_at_native and widthDisplay==numcols and heightDisplay==numrows:
+            im.set_interpolation(0)
+        else:
+            im.set_interpolation(self._interpd[self._interpolation])
+
+        # stretch factor of the image to fit the output extents
+        # resize viewport to display
+        rx = widthDisplay / numcols
+        ry = heightDisplay  / numrows
+        #im.apply_scaling(rx*sx, ry*sy)
+        im.apply_scaling(rx, ry)
+        #im.resize(int(widthDisplay+0.5), int(heightDisplay+0.5),
+        #          norm=self._filternorm, radius=self._filterrad)
+        im.resize(int(widthDisplay), int(heightDisplay),
+                  norm=self._filternorm, radius=self._filterrad)
+        return im
+
+
+
+
     def make_image_of_extents(self, extents, magnification=1.0):
         """
         extents = l, b, r, t
