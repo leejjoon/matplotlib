@@ -164,14 +164,6 @@ class RendererBase:
         """
         raise NotImplementedError
 
-    def draw_path_with_effects(self, gc, path, transform, rgbFace=None,
-                               path_effects=None):
-        if path_effects:
-            for pe in path_effects:
-                pe.draw_path(self, gc, path, transform, rgbFace)
-        else:
-            self.draw_path(gc, path, transform, rgbFace)
-
     def draw_markers(self, gc, marker_path, marker_trans, path, trans,
                      rgbFace=None):
         """
@@ -740,6 +732,32 @@ class RendererBase:
                 pe.draw_text(self, gc, x, y, s, prop, angle, ismath)
         else:
             self.draw_text(gc, x, y, s, prop, angle, ismath)
+
+    def draw_path_collection_with_effects(self, gc, master_transform,
+                                          paths, all_transforms,
+                                          offsets, offsetTrans,
+                                          facecolors, edgecolors,
+                                          linewidths, linestyles,
+                                          antialiaseds, urls,
+                                          offset_position,
+                                          path_effects=None):
+        if path_effects:
+            for pe in path_effects:
+                pe.draw_path_collection(self, gc, master_transform,
+                                        paths, all_transforms,
+                                        offsets, offsetTrans,
+                                        facecolors, edgecolors,
+                                        linewidths, linestyles,
+                                        antialiaseds, urls,
+                                        offset_position)
+        else:
+            self.draw_path_collection(gc, master_transform,
+                                      paths, all_transforms,
+                                      offsets, offsetTrans,
+                                      facecolors, edgecolors,
+                                      linewidths, linestyles,
+                                      antialiaseds, urls,
+                                      offset_position)
 
 
 class GraphicsContextBase:

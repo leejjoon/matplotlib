@@ -434,11 +434,9 @@ class Patch(artist.Artist):
         tpath = transform.transform_path_non_affine(path)
         affine = transform.get_affine()
 
-        if self.get_path_effects():
-            for path_effect in self.get_path_effects():
-                path_effect.draw_path(renderer, gc, tpath, affine, rgbFace)
-        else:
-            renderer.draw_path(gc, tpath, affine, rgbFace)
+        path_effects = self.get_path_effects()
+        renderer.draw_path_with_effects(gc, tpath, affine, rgbFace,
+                                        path_effects=path_effects)
 
         gc.restore()
         renderer.close_group('patch')
@@ -4024,27 +4022,31 @@ class FancyArrowPatch(Patch):
         #
         #dpi_cor = renderer.points_to_pixels(1.)
         self.set_dpi_cor(renderer.points_to_pixels(1.))
-        path, fillable = self.get_path_in_displaycoord()
+        paths, fillable = self.get_path_in_displaycoord()
 
         if not cbook.iterable(fillable):
-            path = [path]
+            paths = [paths]
             fillable = [fillable]
 
         affine = transforms.IdentityTransform()
 
-        if self.get_path_effects():
-            for path_effect in self.get_path_effects():
-                for p, f in zip(path, fillable):
-                    if f:
-                        path_effect.draw_path(renderer, gc, p, affine, rgbFace)
-                    else:
-                        path_effect.draw_path(renderer, gc, p, affine, None)
-        else:
-            for p, f in zip(path, fillable):
-                if f:
-                    renderer.draw_path(gc, p, affine, rgbFace)
-                else:
-                    renderer.draw_path(gc, p, affine, None)
+        facecolors = []
+
+        for f in fillable:
+            if f:
+                facecolors.append(rgbFace)
+            else:
+                facecolors.append(None)
+
+        path_effects = self.get_path_effects()
+        renderer.draw_path_collection_with_effects(gc, affine,
+                                                   paths, [],
+                                                   [], [],
+                                                   facecolors, [gc._rgb],
+                                                   [], [],
+                                                   [self._antialiased], [],
+                                                   [],
+                                                   path_effects=path_effects)
 
         gc.restore()
         renderer.close_group('patch')
