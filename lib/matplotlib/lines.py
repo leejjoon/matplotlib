@@ -634,7 +634,7 @@ class Line2D(Artist):
                 path_effects = self.get_path_effects()
                 renderer.draw_markers_with_effects(
                     gc, marker_path, marker_trans, subsampled,
-                    affine.frozen(), rgbFace,
+                    affine.frozen(), rgbaFace,
                     path_effects=path_effects)
 
                 alt_marker_path = marker.get_alt_path()
@@ -647,7 +647,7 @@ class Line2D(Artist):
                     path_effects = self.get_path_effects()
                     renderer.draw_markers_with_effects(
                         gc, alt_marker_path, alt_marker_trans, subsampled,
-                        affine.frozen(), rgbFaceAlt,
+                        affine.frozen(), rgbaFaceAlt,
                         path_effects=path_effects)
 
             gc.restore()
