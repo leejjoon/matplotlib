@@ -89,6 +89,16 @@ class Line2D(Artist):
         '':     '_draw_nothing',
     }
 
+    _lineStyleGcUpdaters = {
+        '-'          : '_update_gc_solid',
+        '--'         : '_update_gc_dashed',
+        '-.'         : '_update_gc_dash_dot',
+        ':'          : '_update_gc_dotted',
+        'None'       : None,
+        ' '          : None,
+        ''           : None,
+    }
+
     _drawStyles_l = {
         'default':    '_draw_lines',
         'steps-mid':  '_draw_steps_mid',
@@ -105,6 +115,14 @@ class Line2D(Artist):
     drawStyles.update(_drawStyles_s)
     # Need a list ordered with long names first:
     drawStyleKeys = _drawStyles_l.keys() + _drawStyles_s.keys()
+
+    _drawStyleGetters = {
+        'default'    : '_get_style_lines',
+        'steps-mid'  : '_get_style_steps_mid',
+        'steps-pre'  : '_get_style_steps_pre',
+        'steps-post' : '_get_style_steps_post',
+        'steps'      : '_get_style_steps_pre',
+    }
 
     # Referenced here to maintain API.  These are defined in
     # MarkerStyle
@@ -546,21 +564,23 @@ class Line2D(Artist):
         gc.set_capstyle(cap)
         gc.set_snap(self.get_snap())
 
-        funcname = self._lineStyles.get(self._linestyle, '_draw_nothing')
-        if funcname != '_draw_nothing':
-            tpath, affine = transf_path.get_transformed_path_and_affine()
+        #funcname = self._lineStyles.get(self._linestyle, '_draw_nothing')
+        gc_updater_name = self._lineStyleGcUpdaters.get(self._linestyle)
+        #if funcname != '_draw_nothing':
+        if gc_updater_name is not None:
+            tpath, affine = self._transformed_path.get_transformed_path_and_affine()
             if len(tpath.vertices):
-                self._lineFunc = getattr(self, funcname)
-                funcname = self.drawStyles.get(self._drawstyle, '_draw_lines')
-                drawFunc = getattr(self, funcname)
+                update_gc_func = getattr(self, gc_updater_name)
+                update_gc_func(gc)
 
-                if self.get_path_effects():
-                    affine_frozen = affine.frozen()
-                    for pe in self.get_path_effects():
-                        pe_renderer = pe.get_proxy_renderer(renderer)
-                        drawFunc(pe_renderer, gc, tpath, affine_frozen)
-                else:
-                    drawFunc(renderer, gc, tpath, affine.frozen())
+                getter_name = self._drawStyleGetters.get(self._drawstyle,
+                                                         "_get_style_lines")
+                get_style_func = getattr(self, getter_name)
+                tpath2, affine2 = get_style_func(tpath, affine.frozen())
+
+                path_effects = self.get_path_effects()
+                renderer.draw_path_with_effects(gc, tpath2, affine2,
+                                                path_effects=path_effects)
 
         if self._marker:
             gc = renderer.new_gc()
@@ -611,15 +631,11 @@ class Line2D(Artist):
                 if rgbaFace is not None:
                     gc.set_alpha(rgbaFace[3])
 
-                if self.get_path_effects():
-                    affine_frozen = affine.frozen()
-                    for pe in self.get_path_effects():
-                        pe.draw_markers(renderer, gc, marker_path, marker_trans,
-                                        subsampled, affine_frozen, rgbaFace)
-                else:
-                    renderer.draw_markers(
-                        gc, marker_path, marker_trans, subsampled, affine.frozen(),
-                        rgbaFace)
+                path_effects = self.get_path_effects()
+                renderer.draw_markers_with_effects(
+                    gc, marker_path, marker_trans, subsampled,
+                    affine.frozen(), rgbFace,
+                    path_effects=path_effects)
 
                 alt_marker_path = marker.get_alt_path()
                 if alt_marker_path:
@@ -628,16 +644,11 @@ class Line2D(Artist):
                     alt_marker_trans = marker.get_alt_transform()
                     alt_marker_trans = alt_marker_trans.scale(w)
 
-                    if self.get_path_effects():
-                        affine_frozen = affine.frozen()
-                        for pe in self.get_path_effects():
-                            pe.draw_markers(renderer, gc, alt_marker_path,
-                                            alt_marker_trans, subsampled,
-                                            affine_frozen, rgbaFaceAlt)
-                    else:
-                        renderer.draw_markers(
-                            gc, alt_marker_path, alt_marker_trans, subsampled,
-                            affine.frozen(), rgbaFaceAlt)
+                    path_effects = self.get_path_effects()
+                    renderer.draw_markers_with_effects(
+                        gc, alt_marker_path, alt_marker_trans, subsampled,
+                        affine.frozen(), rgbFaceAlt,
+                        path_effects=path_effects)
 
             gc.restore()
 
@@ -934,10 +945,12 @@ class Line2D(Artist):
             self.set_linestyle('--')
         self._dashSeq = seq  # TODO: offset ignored for now
 
-    def _draw_lines(self, renderer, gc, path, trans):
-        self._lineFunc(renderer, gc, path, trans)
 
-    def _draw_steps_pre(self, renderer, gc, path, trans):
+    def _get_style_lines(self, path, trans):
+        return path, trans
+
+
+    def _get_style_steps_pre(self, path, trans):
         vertices = self._xy
         steps = ma.zeros((2 * len(vertices) - 1, 2), np.float_)
 
@@ -946,9 +959,10 @@ class Line2D(Artist):
 
         path = Path(steps)
         path = path.transformed(self.get_transform())
-        self._lineFunc(renderer, gc, path, IdentityTransform())
+        return path, IdentityTransform()
 
-    def _draw_steps_post(self, renderer, gc, path, trans):
+
+    def _get_style_steps_post(self, path, trans):
         vertices = self._xy
         steps = ma.zeros((2 * len(vertices) - 1, 2), np.float_)
 
@@ -957,9 +971,10 @@ class Line2D(Artist):
 
         path = Path(steps)
         path = path.transformed(self.get_transform())
-        self._lineFunc(renderer, gc, path, IdentityTransform())
+        return path, IdentityTransform()
 
-    def _draw_steps_mid(self, renderer, gc, path, trans):
+
+    def _get_style_steps_mid(self, path, trans):
         vertices = self._xy
         steps = ma.zeros((2 * len(vertices), 2), np.float_)
 
@@ -971,25 +986,66 @@ class Line2D(Artist):
 
         path = Path(steps)
         path = path.transformed(self.get_transform())
-        self._lineFunc(renderer, gc, path, IdentityTransform())
+        return path, IdentityTransform()
 
-    def _draw_solid(self, renderer, gc, path, trans):
+
+    def _draw_lines(self, renderer, gc, path, trans):
+        self._lineFunc(renderer, gc, path, trans)
+
+
+    def _draw_steps_pre(self, renderer, gc, path, trans):
+        path, tr = self._get_style_steps_pre(path, trans)
+        self._lineFunc(renderer, gc, path, tr)
+
+
+    def _draw_steps_post(self, renderer, gc, path, trans):
+        path, tr = self._get_style_steps_post(path, trans)
+        self._lineFunc(renderer, gc, path, tr)
+
+
+    def _draw_steps_mid(self, renderer, gc, path, trans):
+        path, tr = self._get_style_steps_mi(path, trans)
+        self._lineFunc(renderer, gc, path, tr)
+
+
+    def _update_gc_solid(self, gc):
         gc.set_linestyle('solid')
-        renderer.draw_path(gc, path, trans)
 
-    def _draw_dashed(self, renderer, gc, path, trans):
+
+    def _update_gc_dashed(self, gc):
         gc.set_linestyle('dashed')
         if self._dashSeq is not None:
             gc.set_dashes(0, self._dashSeq)
 
+
+    def _update_gc_dash_dot(self, gc):
+        gc.set_linestyle('dashdot')
+
+
+    def _update_gc_dotted(self, gc):
+        gc.set_linestyle('dotted')
+
+
+    # _draw_* methods all call `renderer.draw_path`. This makes a bit
+    # difficult if one wants to override the `draw_path` method, e.g.,
+    # `path_effects`. This family of methods may be deprecated in
+    # preference of _update_gc_* methods?
+
+    def _draw_solid(self, renderer, gc, path, trans):
+        self._update_gc_solid(gc)
+        renderer.draw_path(gc, path, trans)
+
+
+    def _draw_dashed(self, renderer, gc, path, trans):
+        self._update_gc_dashed(gc)
         renderer.draw_path(gc, path, trans)
 
     def _draw_dash_dot(self, renderer, gc, path, trans):
-        gc.set_linestyle('dashdot')
+        self._update_gc_dash_dot(gc)
         renderer.draw_path(gc, path, trans)
 
     def _draw_dotted(self, renderer, gc, path, trans):
-        gc.set_linestyle('dotted')
+        self._update_gc_dotted(gc)
         renderer.draw_path(gc, path, trans)
 
     def update_from(self, other):

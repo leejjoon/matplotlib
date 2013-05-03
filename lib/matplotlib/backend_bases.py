@@ -164,8 +164,16 @@ class RendererBase:
         """
         raise NotImplementedError
 
-    def draw_markers(self, gc, marker_path, marker_trans, path,
-                     trans, rgbFace=None):
+    def draw_path_with_effects(self, gc, path, transform, rgbFace=None,
+                               path_effects=None):
+        if path_effects:
+            for pe in path_effects:
+                pe.draw_path(self, gc, path, transform, rgbFace)
+        else:
+            self.draw_path(gc, path, transform, rgbFace)
+
+    def draw_markers(self, gc, marker_path, marker_trans, path, trans,
+                     rgbFace=None):
         """
         Draws a marker at each of the vertices in path.  This includes
         all vertices, including control points on curves.  To avoid
@@ -193,6 +201,17 @@ class RendererBase:
                                marker_trans +
                                transforms.Affine2D().translate(x, y),
                                rgbFace)
+
+    def draw_markers_with_effects(self, gc, marker_path, marker_trans,
+                                  path, trans, rgbFace=None,
+                                  path_effects=None):
+        if path_effects:
+            for pe in path_effects:
+                pe.draw_markers(self, gc, marker_path, marker_trans,
+                                path, trans, rgbFace)
+        else:
+            self.draw_markers(gc, marker_path, marker_trans,
+                              path, trans, rgbFace)
 
     def draw_path_collection(self, gc, master_transform, paths, all_transforms,
                              offsets, offsetTrans, facecolors, edgecolors,
