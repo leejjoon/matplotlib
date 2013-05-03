@@ -291,35 +291,28 @@ class Text(Artist):
         whs = np.zeros((len(lines), 2))
         horizLayout = np.zeros((len(lines), 4))
 
-        if self.get_path_effects():
-            from matplotlib.backends.backend_mixed import MixedModeRenderer
-            if isinstance(renderer, MixedModeRenderer):
-                def get_text_width_height_descent(*kl, **kwargs):
-                    return RendererBase.get_text_width_height_descent(
-                                                    renderer._renderer,
-                                                    *kl, **kwargs)
-            else:
-                def get_text_width_height_descent(*kl, **kwargs):
-                    return RendererBase.get_text_width_height_descent(
-                                                        renderer,
-                                                        *kl, **kwargs)
-        else:
-            get_text_width_height_descent = renderer.get_text_width_height_descent
+        get_text_whd = renderer.get_text_width_height_descent_with_effects
+        path_effects = self.get_path_effects()
 
         # Find full vertical extent of font,
         # including ascenders and descenders:
-        tmp, lp_h, lp_bl = get_text_width_height_descent('lp',
-                                                         self._fontproperties,
-                                                         ismath=False)
+        tmp, lp_h, lp_bl = get_text_whd('lp',
+                                        self._fontproperties,
+                                        ismath=False,
+                                        path_effects=path_effects
+                                        )
+
         offsety = lp_h * self._linespacing
 
         baseline = 0
         for i, line in enumerate(lines):
             clean_line, ismath = self.is_math_text(line)
             if clean_line:
-                w, h, d = get_text_width_height_descent(clean_line,
-                                                        self._fontproperties,
-                                                        ismath=ismath)
+                w, h, d = get_text_whd(clean_line,
+                                       self._fontproperties,
+                                       ismath=ismath,
+                                       path_effects=path_effects)
+
             else:
                 w, h, d = 0, 0, 0
 
@@ -571,6 +564,9 @@ class Text(Artist):
             bbox_artist(self, renderer, self._bbox)
         angle = self.get_rotation()
 
+
+        path_effects = self.get_path_effects()
+
         if rcParams['text.usetex']:
             for line, wh, x, y in info:
                 if not np.isfinite(x) or not np.isfinite(y):
@@ -582,13 +578,9 @@ class Text(Artist):
                     y = canvash - y
                 clean_line, ismath = self.is_math_text(line)
 
-                if self.get_path_effects():
-                    for path_effect in self.get_path_effects():
-                        path_effect.draw_tex(renderer, gc, x, y, clean_line,
-                                             self._fontproperties, angle)
-                else:
-                    renderer.draw_tex(gc, x, y, clean_line,
-                                      self._fontproperties, angle, mtext=self)
+                renderer.draw_tex_with_effects(gc, x, y, clean_line,
+                                               self._fontproperties, angle,
+                                               path_effects=path_effects)
         else:
             for line, wh, x, y in info:
                 if not np.isfinite(x) or not np.isfinite(y):
@@ -600,15 +592,10 @@ class Text(Artist):
                     y = canvash - y
                 clean_line, ismath = self.is_math_text(line)
 
-                if self.get_path_effects():
-                    for path_effect in self.get_path_effects():
-                        path_effect.draw_text(renderer, gc, x, y, clean_line,
-                                              self._fontproperties, angle,
-                                              ismath=ismath)
-                else:
-                    renderer.draw_text(gc, x, y, clean_line,
-                                       self._fontproperties, angle,
-                                       ismath=ismath, mtext=self)
+                renderer.draw_text_with_effects(gc, x, y, clean_line,
+                                                self._fontproperties, angle,
+                                                ismath=ismath,
+                                                path_effects=path_effects)
 
         gc.restore()
         renderer.close_group('text')
