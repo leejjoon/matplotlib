@@ -257,21 +257,13 @@ class Collection(artist.Artist, cm.ScalarMappable):
         if self._hatch:
             gc.set_hatch(self._hatch)
 
-        if self.get_path_effects():
-            #from patheffects import PathEffectsRenderer
-            for pe in self.get_path_effects():
-                pe.draw_path_collection(renderer,
-                    gc, transform.frozen(), paths, self.get_transforms(),
-                    offsets, transOffset, self.get_facecolor(), self.get_edgecolor(),
-                    self._linewidths, self._linestyles, self._antialiaseds, self._urls,
-                    self._offset_position)
-        else:
-
-            renderer.draw_path_collection(
-                gc, transform.frozen(), paths, self.get_transforms(),
-                offsets, transOffset, self.get_facecolor(), self.get_edgecolor(),
-                self._linewidths, self._linestyles, self._antialiaseds, self._urls,
-                self._offset_position)
+        path_effects = self.get_path_effects()
+        renderer.draw_path_collection_with_effects(
+            gc, transform.frozen(), paths, self.get_transforms(),
+            offsets, transOffset, self.get_facecolor(), self.get_edgecolor(),
+            self._linewidths, self._linestyles, self._antialiaseds, self._urls,
+            self._offset_position,
+            path_effects)
 
         gc.restore()
         renderer.close_group(self.__class__.__name__)

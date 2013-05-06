@@ -4036,16 +4036,20 @@ class FancyArrowPatch(Patch):
             if f:
                 facecolors.append(rgbFace)
             else:
-                facecolors.append(None)
+                facecolors.append([0, 0, 0, 0])
 
+        facecolors = np.array(facecolors)
+        edgecolors = np.array([gc._rgb])
+        linewidths = [self.get_linewidth()]
         path_effects = self.get_path_effects()
         renderer.draw_path_collection_with_effects(gc, affine,
                                                    paths, [],
-                                                   [], [],
-                                                   facecolors, [gc._rgb],
-                                                   [], [],
-                                                   [self._antialiased], [],
                                                    [],
+                                                   transforms.IdentityTransform(),
+                                                   facecolors, edgecolors,
+                                                   linewidths, [],
+                                                   [self._antialiased], [],
+                                                   "screen",
                                                    path_effects=path_effects)
 
         gc.restore()
