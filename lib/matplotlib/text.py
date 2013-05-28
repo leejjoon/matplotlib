@@ -118,10 +118,12 @@ def _get_textbox(text, renderer):
     theta = np.deg2rad(text.get_rotation())
     tr = mtransforms.Affine2D().rotate(-theta)
 
-    for t, wh, x, y in text._get_layout(renderer)[1]:
+    _, parts, d = text._get_layout(renderer)
+
+    for t, wh, x, y in parts:
         w, h = wh
 
-        xt1, yt1 = tr.transform_point((x, y))
+        xt1, yt1 = tr.transform_point((x, y - d))
         xt2, yt2 = xt1 + w, yt1 + h
 
         projected_xs.extend([xt1, xt2])
@@ -443,7 +445,7 @@ class Text(Artist):
 
         xs, ys = xys[:, 0], xys[:, 1]
 
-        ret = bbox, zip(lines, whs, xs, ys)
+        ret = bbox, zip(lines, whs, xs, ys), d
         self.cached[key] = ret
         return ret
 
@@ -509,8 +511,7 @@ class Text(Artist):
             posx, posy = trans.transform_point((posx, posy))
 
             x_box, y_box, w_box, h_box = _get_textbox(self, renderer)
-            self._bbox_patch.set_bounds(0., 0.,
-                                        w_box, h_box)
+            self._bbox_patch.set_bounds(0., 0., w_box, h_box)
             theta = np.deg2rad(self.get_rotation())
             tr = mtransforms.Affine2D().rotate(theta)
             tr = tr.translate(posx + x_box, posy + y_box)
@@ -526,8 +527,7 @@ class Text(Artist):
         """
 
         x_box, y_box, w_box, h_box = _get_textbox(self, renderer)
-        self._bbox_patch.set_bounds(0., 0.,
-                                    w_box, h_box)
+        self._bbox_patch.set_bounds(0., 0., w_box, h_box)
         theta = np.deg2rad(self.get_rotation())
         tr = mtransforms.Affine2D().rotate(theta)
         tr = tr.translate(posx + x_box, posy + y_box)
@@ -550,7 +550,7 @@ class Text(Artist):
 
         renderer.open_group('text', self.get_gid())
 
-        bbox, info = self._get_layout(renderer)
+        bbox, info, descent = self._get_layout(renderer)
         trans = self.get_transform()
 
         # don't use self.get_position here, which refers to text position
@@ -768,7 +768,7 @@ class Text(Artist):
         if self._renderer is None:
             raise RuntimeError('Cannot get window extent w/o renderer')
 
-        bbox, info = self._get_layout(self._renderer)
+        bbox, info, descent = self._get_layout(self._renderer)
         x, y = self.get_position()
         x, y = self.get_transform().transform_point((x, y))
         bbox = bbox.translated(x, y)
@@ -1997,8 +1997,7 @@ class Annotation(Text, _AnnotationBase):
             posx, posy = self._x, self._y
 
             x_box, y_box, w_box, h_box = _get_textbox(self, renderer)
-            self._bbox_patch.set_bounds(0., 0.,
-                                        w_box, h_box)
+            self._bbox_patch.set_bounds(0., 0., w_box, h_box)
             theta = np.deg2rad(self.get_rotation())
             tr = mtransforms.Affine2D().rotate(theta)
             tr = tr.translate(posx + x_box, posy + y_box)
