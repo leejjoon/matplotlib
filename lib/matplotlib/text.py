@@ -288,15 +288,11 @@ class Text(Artist):
         if key in self.cached:
             return self.cached[key]
 
-        horizLayout = []
-
         thisx, thisy = 0.0, 0.0
+        # thisy is the baseline location of each line.
         xmin, ymin = 0.0, 0.0
         width, height = 0.0, 0.0
         lines = self.get_text().split('\n')
-
-        whs = np.zeros((len(lines), 2))
-        horizLayout = np.zeros((len(lines), 4))
 
         if self.get_path_effects():
             from matplotlib.backends.backend_mixed import MixedModeRenderer
@@ -318,9 +314,11 @@ class Text(Artist):
         tmp, lp_h, lp_bl = get_text_width_height_descent('lp',
                                                          self._fontproperties,
                                                          ismath=False)
-        offsety = (lp_h - lp_bl) * self._linespacing
+        lp_a = lp_h - lp_bl
 
-        baseline = 0
+        offsetLayout = np.zeros((len(lines), 2))
+        whdLayout = np.zeros((len(lines), 3))
+
         for i, line in enumerate(lines):
             clean_line, ismath = self.is_math_text(line)
             if clean_line:
@@ -334,41 +332,45 @@ class Text(Artist):
             # text net-height(excluding baseline) is larger than that
             # of a "l" (e.g., use of superscripts), which seems
             # what TeX does.
-            h = max(h, lp_h)
-            d = max(d, lp_bl)
 
-            whs[i] = w, h
+            # if not first line, shift thisy by the amount of ascent
+            # (uses minimum ascent of lp) times linespacing.
+            if i > 0:
+                thisy -= max(lp_a, (h - d)) * self._linespacing
 
-            baseline = (h - d) - thisy
-            thisy -= max(offsety, (h - d) * self._linespacing)
-            horizLayout[i] = thisx, thisy, w, h
-            thisy -= d
+            offsetLayout[i] = thisx, thisy
+
+            # now shift thisy by descent (uses minimum descent of lp)
+            thisy -= max(lp_bl, d) * self._linespacing
+
+            whdLayout[i] = w, h, d
             width = max(width, w)
-            descent = d
 
-        ymin = horizLayout[-1][1]
-        ymax = horizLayout[0][1] + horizLayout[0][3]
-        height = ymax - ymin
-        xmax = xmin + width
-
-        # get the rotation matrix
-        M = Affine2D().rotate_deg(self.get_rotation())
-
-        offsetLayout = np.zeros((len(lines), 2))
-        offsetLayout[:] = horizLayout[:, 0:2]
-        # now offset the individual text lines within the box
+        # now we adjust thisx of individual lines for multiline
+        # alignment.
         if len(lines) > 1:  # do the multiline aligment
             malign = self._get_multialignment()
             if malign == 'center':
-                offsetLayout[:, 0] += width / 2.0 - horizLayout[:, 2] / 2.0
+                offsetLayout[:, 0] += width / 2.0 - whdLayout[:, 0] / 2.0
             elif malign == 'right':
-                offsetLayout[:, 0] += width - horizLayout[:, 2]
+                offsetLayout[:, 0] += width - whdLayout[:, 0]
+
+        ymin = offsetLayout[-1][1] - whdLayout[-1][2]
+        # bottom = (thisy  - descent) of last line
+
+        ymax = offsetLayout[0][1] + whdLayout[0][1] - whdLayout[0][2]
+        # top = (thisy  + ascent (= height - descent)) of first line
+
+        height = ymax - ymin
+        xmax = xmin + width
 
         # the corners of the unrotated bounding box
         cornersHoriz = np.array(
             [(xmin, ymin), (xmin, ymax), (xmax, ymax), (xmax, ymin)],
             np.float_)
-        cornersHoriz[:,1] -= descent
+
+        # get the rotation matrix
+        M = Affine2D().rotate_deg(self.get_rotation())
 
         # now rotate the bbox
         cornersRotated = M.transform(cornersHoriz)
@@ -403,7 +405,8 @@ class Text(Artist):
             elif valign == 'top':
                 offsety = (ymin + height)
             elif valign == 'baseline':
-                offsety = (ymin + height) - baseline
+                # this needs more careful assesment for multiline texts
+                offsety = 0.
             else:
                 offsety = ymin
         else:
@@ -422,7 +425,8 @@ class Text(Artist):
             elif valign == 'top':
                 offsety = ymax1
             elif valign == 'baseline':
-                offsety = ymax1 - baseline
+                # this needs more careful assesment for multiline texts
+                offsety = 0.
             else:
                 offsety = ymin1
 
@@ -439,7 +443,9 @@ class Text(Artist):
 
         xs, ys = xys[:, 0], xys[:, 1]
 
-        ret = bbox, zip(lines, whs, xs, ys), descent
+        whs = whdLayout[:,:2]
+        ret = bbox, zip(lines, whs, xs, ys), whdLayout[-1][2]
+
         self.cached[key] = ret
         return ret
 
