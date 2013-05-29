@@ -718,10 +718,10 @@ class TextArea(OffsetBox):
         _, h_, d_ = renderer.get_text_width_height_descent(
             "lp", self._text._fontproperties, ismath=False)
 
-        bbox, info, d = self._text._get_layout(renderer)
+        bbox, info = self._text._get_layout(renderer)
         w, h = bbox.width, bbox.height
 
-        line = info[-1][0]  # last line
+        d = info[-1][1][2]
 
         self._baseline_transform.clear()
 

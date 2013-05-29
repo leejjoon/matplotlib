@@ -118,12 +118,13 @@ def _get_textbox(text, renderer):
     theta = np.deg2rad(text.get_rotation())
     tr = mtransforms.Affine2D().rotate(-theta)
 
-    _, parts, d = text._get_layout(renderer)
+    _, parts = text._get_layout(renderer)
 
-    for t, wh, x, y in parts:
-        w, h = wh
+    for t, whd, x, y in parts:
+        w, h, d = whd
 
-        xt1, yt1 = tr.transform_point((x, y - d))
+        xt1, yt1 = tr.transform_point((x, y))
+        yt1 -= d
         xt2, yt2 = xt1 + w, yt1 + h
 
         projected_xs.extend([xt1, xt2])
@@ -294,7 +295,7 @@ class Text(Artist):
         width, height = 0.0, 0.0
         lines = self.get_text().split('\n')
 
-        whs = np.zeros((len(lines), 2))
+        whds = np.zeros((len(lines), 3))
         horizLayout = np.zeros((len(lines), 4))
 
         if self.get_path_effects():
@@ -331,7 +332,7 @@ class Text(Artist):
 
             h, d = lp_h, lp_bl
 
-            whs[i] = w, h
+            whds[i] = w, h, d
 
             # For general multiline text, we will have a fixed spacing
             # between the "baseline" of the upper line and "top" of
@@ -445,7 +446,7 @@ class Text(Artist):
 
         xs, ys = xys[:, 0], xys[:, 1]
 
-        ret = bbox, zip(lines, whs, xs, ys), d
+        ret = bbox, zip(lines, whds, xs, ys)
         self.cached[key] = ret
         return ret
 
@@ -550,7 +551,7 @@ class Text(Artist):
 
         renderer.open_group('text', self.get_gid())
 
-        bbox, info, descent = self._get_layout(renderer)
+        bbox, info = self._get_layout(renderer)
         trans = self.get_transform()
 
         # don't use self.get_position here, which refers to text position
@@ -768,7 +769,7 @@ class Text(Artist):
         if self._renderer is None:
             raise RuntimeError('Cannot get window extent w/o renderer')
 
-        bbox, info, descent = self._get_layout(self._renderer)
+        bbox, info = self._get_layout(self._renderer)
         x, y = self.get_position()
         x, y = self.get_transform().transform_point((x, y))
         bbox = bbox.translated(x, y)
