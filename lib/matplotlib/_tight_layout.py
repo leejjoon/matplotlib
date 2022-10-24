@@ -71,6 +71,19 @@ def _auto_adjust_subplotpars(
             Bbox.union([ax.get_position(original=True) for ax in subplots])
             for subplots in subplot_list]
 
+    from matplotlib.figure import SubFigure
+    if isinstance(fig, SubFigure):
+        transFigure = fig.transSubfigure
+
+        # get the figure size for the subfigure
+        fig_width_inch, fig_height_inch = fig.figure.get_size_inches()
+        fig_width_inch *= fig.bbox.width / fig.figure.bbox.width
+        fig_height_inch *= fig.bbox.height / fig.figure.bbox.height
+
+    else:
+        transFigure = fig.transFigure
+        fig_width_inch, fig_height_inch = fig.get_size_inches()
+
     for subplots, ax_bbox, (rowspan, colspan) in zip(
             subplot_list, ax_bbox_list, span_pairs):
         if all(not ax.get_visible() for ax in subplots):
@@ -82,14 +95,12 @@ def _auto_adjust_subplotpars(
                 bb += [martist._get_tightbbox_for_layout_only(ax, renderer)]
 
         tight_bbox_raw = Bbox.union(bb)
-        tight_bbox = fig.transFigure.inverted().transform_bbox(tight_bbox_raw)
+        tight_bbox = transFigure.inverted().transform_bbox(tight_bbox_raw)
 
         hspaces[rowspan, colspan.start] += ax_bbox.xmin - tight_bbox.xmin  # l
         hspaces[rowspan, colspan.stop] += tight_bbox.xmax - ax_bbox.xmax  # r
         vspaces[rowspan.start, colspan] += tight_bbox.ymax - ax_bbox.ymax  # t
         vspaces[rowspan.stop, colspan] += ax_bbox.ymin - tight_bbox.ymin  # b
-
-    fig_width_inch, fig_height_inch = fig.get_size_inches()
 
     # margins can be negative for axes with aspect applied, so use max(, 0) to
     # make them nonnegative.
@@ -97,7 +108,7 @@ def _auto_adjust_subplotpars(
         margin_left = max(hspaces[:, 0].max(), 0) + pad_inch/fig_width_inch
         suplabel = fig._supylabel
         if suplabel and suplabel.get_in_layout():
-            rel_width = fig.transFigure.inverted().transform_bbox(
+            rel_width = transFigure.inverted().transform_bbox(
                 suplabel.get_window_extent(renderer)).width
             margin_left += rel_width + pad_inch/fig_width_inch
     if not margin_right:
@@ -105,14 +116,14 @@ def _auto_adjust_subplotpars(
     if not margin_top:
         margin_top = max(vspaces[0, :].max(), 0) + pad_inch/fig_height_inch
         if fig._suptitle and fig._suptitle.get_in_layout():
-            rel_height = fig.transFigure.inverted().transform_bbox(
+            rel_height = transFigure.inverted().transform_bbox(
                 fig._suptitle.get_window_extent(renderer)).height
             margin_top += rel_height + pad_inch/fig_height_inch
     if not margin_bottom:
         margin_bottom = max(vspaces[-1, :].max(), 0) + pad_inch/fig_height_inch
         suplabel = fig._supxlabel
         if suplabel and suplabel.get_in_layout():
-            rel_height = fig.transFigure.inverted().transform_bbox(
+            rel_height = transFigure.inverted().transform_bbox(
                 suplabel.get_window_extent(renderer)).height
             margin_bottom += rel_height + pad_inch/fig_height_inch
 

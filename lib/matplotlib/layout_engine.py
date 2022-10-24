@@ -190,6 +190,58 @@ class TightLayoutEngine(LayoutEngine):
                 self._params[td] = locals()[td]
 
 
+class TightLayoutSubfiguresEngine(TightLayoutEngine):
+    """
+    Implements the ``tight_layout`` geometry management for subfigures.
+    """
+    _adjust_compatible = True
+    _colorbar_gridspec = False
+
+    def execute(self, fig):
+        """
+        Execute tight_layout for subfigures. It will collect and combine
+        tight_layout parameters for each subfigures, then apply it to the
+        parent figure.
+
+        Parameters
+        ----------
+        fig : `.Figure` to perform layout on.
+
+        See also: `TightLayoutEngine`, `.figure.Figure.tight_layout`
+        and `.pyplot.tight_layout`.
+
+        """
+        info = self._params
+        renderer = fig._get_renderer()
+        with getattr(renderer, "_draw_disabled", nullcontext)():
+            kwargs_list = []
+            for sfig in fig.subfigs:
+                kwargs_list.append(sfig.get_tight_layout_kwargs(
+                    pad=info['pad'], h_pad=info['h_pad'], w_pad=info['w_pad'],
+                    rect=info['rect']
+                ))
+
+            kwargs = {}
+            for k, minmax in [("left", max),
+                              ("right", min),
+                              ("bottom", max),
+                              ("top", min),
+                              ("hspace", max),
+                              ("wspace", max),
+                              ]:
+                _ = [kwargs1.get(k) for kwargs1 in kwargs_list]
+                if v := [v1 for v1 in _ if v1 is not None]:
+                    kwargs[k] = minmax(v)
+
+        if kwargs:
+            fig.subplots_adjust(**kwargs)
+
+    def set(self, *, pad=None, w_pad=None, h_pad=None, rect=None):
+        for td in self.set.__kwdefaults__:
+            if locals()[td] is not None:
+                self._params[td] = locals()[td]
+
+
 class ConstrainedLayoutEngine(LayoutEngine):
     """
     Implements the ``constrained_layout`` geometry management.  See
