@@ -313,6 +313,10 @@ class GridHelperCurveLinear(GridHelperBase):
         # axisline.major_ticklabels.set_visible(True)
         # axisline.minor_ticklabels.set_visible(False)
 
+        # For floating axis, we force the tickangle_mode of "parallel".
+        axisline.major_ticks.set_tickangle_mode("parallel")
+        axisline.minor_ticks.set_tickangle_mode("parallel")
+
         return axisline
 
     def _update_grid(self, x1, y1, x2, y2):

@@ -115,11 +115,13 @@ class Ticks(AttributeCopier, Line2D):
     """
 
     # tick_out is mostly deprecated in favor of tickdir.
-    def __init__(self, ticksize, tick_out=False, *, axis=None, **kwargs):
+    def __init__(self, ticksize, tick_out=False, tickangle_mode="auto",
+                 *, axis=None, **kwargs):
         self._ticksize = ticksize
         self.locs_angles_labels = []
 
         self.set_tick_out(tick_out)
+        self.set_tickangle_mode(tickangle_mode)
 
         self._axis = axis
         if self._axis is not None:
@@ -158,6 +160,29 @@ class Ticks(AttributeCopier, Line2D):
 
     def get_tickdir(self):
         return self._tickdir
+
+    def set_tickangle_mode(self, mode):
+        """
+        Set how tick angles will be determined.
+
+        Parameters
+        ----------
+        mode : {"parallel", "normal", "auto"}
+          'parallel' - ticks along the grid lines
+          'normal' - ticks normal to axis line.
+          'auto' - 'normal' if tickdir is 'out' else 'parallel'
+        """
+        _api.check_in_list(["auto", "normal", "parallel"],
+                           tickangle_mode=mode)
+        self._tickangle_mode = mode
+
+    def get_tickangle_mode(self, return_raw=True):
+        tickangle_mode = self._tickangle_mode
+        if not return_raw and tickangle_mode == "auto":
+            tickangle_mode = ("normal" if self._tickdir == "out"
+                              else "parallel")
+
+        return tickangle_mode
 
     def set_tick_out(self, b):
         """Set whether ticks are drawn inside or outside the axes."""
@@ -911,7 +936,7 @@ class AxisArtist(martist.Artist):
                 "minor_tick_pad", mpl.rcParams[f"{axis_name}tick.minor.pad"]),
         )
 
-    def _get_tick_info(self, tick_iter):
+    def _get_tick_info(self, tick_iter, tickangle_mode="parallel"):
         """
         Return a pair of:
 
@@ -925,9 +950,14 @@ class AxisArtist(martist.Artist):
 
         for loc, angle_normal, angle_tangent, label in tick_iter:
             angle_label = angle_tangent - 90 + ticklabel_add_angle
-            angle_tick = (angle_normal
-                          if 90 <= (angle_label - angle_normal) % 360 <= 270
-                          else angle_normal + 180)
+            if tickangle_mode == "parallel": # tick along the gridlines
+                angle_tick = (angle_normal
+                              if 90 <= (angle_label - angle_normal) % 360 <= 270
+                              else angle_normal + 180)
+            elif tickangle_mode == "normal": # tick normal to axisline.
+                angle_tick = 180+angle_label
+            else:
+                raise ValueError(f"Unsupported tickangle_mode of {tickangle_mode}")
             ticks_loc_angle.append([loc, angle_tick])
             ticklabels_loc_angle_label.append([loc, angle_label, label])
 
@@ -944,6 +974,7 @@ class AxisArtist(martist.Artist):
         multiplier = (
             self.major_ticks.get_visible()
             * {"out": 1, "inout": .5, "in": 0}[self.major_ticks._tickdir])
+
         self.major_ticklabels._external_pad = \
             multiplier * self.major_ticks._ticksize * dpi_cor
         self.minor_ticklabels._external_pad = \
@@ -952,13 +983,17 @@ class AxisArtist(martist.Artist):
         majortick_iter, minortick_iter = \
             self._axis_artist_helper.get_tick_iterators(self.axes)
 
+        tickangle_mode = self.major_ticks.get_tickangle_mode(return_raw=False)
         tick_loc_angle, ticklabel_loc_angle_label = \
-            self._get_tick_info(majortick_iter)
+            self._get_tick_info(majortick_iter, tickangle_mode)
+
         self.major_ticks.set_locs_angles(tick_loc_angle)
         self.major_ticklabels.set_locs_angles_labels(ticklabel_loc_angle_label)
 
+        tickangle_mode = self.minor_ticks.get_tickangle_mode(return_raw=False)
         tick_loc_angle, ticklabel_loc_angle_label = \
-            self._get_tick_info(minortick_iter)
+            self._get_tick_info(minortick_iter, tickangle_mode)
+
         self.minor_ticks.set_locs_angles(tick_loc_angle)
         self.minor_ticklabels.set_locs_angles_labels(ticklabel_loc_angle_label)
 
