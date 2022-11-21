@@ -90,6 +90,21 @@ from matplotlib.transforms import (
 from .axisline_style import AxislineStyle
 
 
+def _get_markers_extents(marker_path, marker_trans,
+                         path, path_trans):
+    # Retruns a list of bbox for markers.
+    # The logic is mostly borrowed from `RendererBase.draw_markers.`
+    bb = []
+    for vertices, codes in path.iter_segments(path_trans, simplify=False):
+        if len(vertices):
+            x, y = vertices[-2:]
+            trans = marker_trans + Affine2D().translate(x, y)
+            b1 = marker_path.get_extents(trans)
+            bb.append(b1)
+
+    return bb
+
+
 class AttributeCopier:
     def get_ref_artist(self):
         """
@@ -237,6 +252,33 @@ class Ticks(AttributeCopier, Line2D):
                 Path(locs), path_trans.get_affine())
 
         gc.restore()
+
+    def get_window_extents(self, renderer=None):
+        # The logic is mostly copied from its draw method.
+
+        if renderer is None:
+            renderer = self.figure._get_renderer()
+
+        if not self.get_visible():
+            return []
+
+        path_trans = self.get_transform()
+        marker_transform = (Affine2D()
+                            .scale(renderer.points_to_pixels(self._ticksize)))
+        tick_path = self._tick_paths[self._tickdir]
+
+        bboxes = []
+        for loc, angle in self.locs_angles:
+            locs = path_trans.transform_non_affine(np.array([loc]))
+            if self.axes and not self.axes.viewLim.contains(*locs[0]):
+                continue
+            bb = _get_markers_extents(
+                tick_path,
+                marker_transform + Affine2D().rotate_deg(angle),
+                Path(locs), path_trans)
+            bboxes.extend(bb)
+
+        return bboxes
 
 
 class LabelBase(mtext.Text):
@@ -561,16 +603,30 @@ class TickLabels(AxisLabel):  # mtext.Text
                            bottom=0,
                            top=180)
 
-    def draw(self, renderer):
-        if not self.get_visible():
-            self._axislabel_pad = self._external_pad
-            return
+    def _update_geom_internal(self, renderer):
 
         r, total_width = self._get_ticklabels_offsets(renderer,
                                                       self._axis_direction)
 
         pad = self._external_pad + renderer.points_to_pixels(self.get_pad())
         self._offset_radius = r + pad
+
+        # the value saved will be used to draw axislabel.
+        self._axislabel_pad = total_width + pad
+
+    def _update_geom(self, renderer):
+        if not self.get_visible():
+            self._axislabel_pad = self._external_pad
+            return
+
+        self._update_geom_internal(renderer)
+
+    def draw(self, renderer):
+        if not self.get_visible():
+            self._axislabel_pad = self._external_pad
+            return
+
+        self._update_geom_internal(renderer)
 
         for (x, y), a, l in self._locs_angles_labels:
             if not l.strip():
@@ -580,9 +636,6 @@ class TickLabels(AxisLabel):  # mtext.Text
             self.set_y(y)
             self.set_text(l)
             LabelBase.draw(self, renderer)
-
-        # the value saved will be used to draw axislabel.
-        self._axislabel_pad = total_width + pad
 
     def set_locs_angles_labels(self, locs_angles_labels):
         self._locs_angles_labels = locs_angles_labels
@@ -595,13 +648,9 @@ class TickLabels(AxisLabel):  # mtext.Text
             self._axislabel_pad = self._external_pad
             return []
 
+        self._update_geom_internal(renderer)
+
         bboxes = []
-
-        r, total_width = self._get_ticklabels_offsets(renderer,
-                                                      self._axis_direction)
-
-        pad = self._external_pad + renderer.points_to_pixels(self.get_pad())
-        self._offset_radius = r + pad
 
         for (x, y), a, l in self._locs_angles_labels:
             self._ref_angle = a
@@ -611,8 +660,7 @@ class TickLabels(AxisLabel):  # mtext.Text
             bb = LabelBase.get_window_extent(self, renderer)
             bboxes.append(bb)
 
-        # the value saved will be used to draw axislabel.
-        self._axislabel_pad = total_width + pad
+        self._update_geom(renderer)
 
         return bboxes
 
@@ -950,14 +998,17 @@ class AxisArtist(martist.Artist):
 
         for loc, angle_normal, angle_tangent, label in tick_iter:
             angle_label = angle_tangent - 90 + ticklabel_add_angle
-            if tickangle_mode == "parallel": # tick along the gridlines
+            if tickangle_mode == "parallel":  # tick along the gridlines
                 angle_tick = (angle_normal
-                              if 90 <= (angle_label - angle_normal) % 360 <= 270
+                              if (90
+                                  <= (angle_label - angle_normal) % 360
+                                  <= 270)
                               else angle_normal + 180)
-            elif tickangle_mode == "normal": # tick normal to axisline.
+            elif tickangle_mode == "normal":  # tick normal to axisline.
                 angle_tick = 180+angle_label
             else:
-                raise ValueError(f"Unsupported tickangle_mode of {tickangle_mode}")
+                raise ValueError(
+                    f"Unsupported tickangle_mode of {tickangle_mode}")
             ticks_loc_angle.append([loc, angle_tick])
             ticklabels_loc_angle_label.append([loc, angle_label, label])
 
@@ -1106,8 +1157,13 @@ class AxisArtist(martist.Artist):
             return
         self._axis_artist_helper.update_lim(self.axes)
         self._update_ticks(renderer)
+        self.major_ticklabels._update_geom(renderer)
+        self.minor_ticklabels._update_geom(renderer)
         self._update_label(renderer)
+
         bb = [
+            *self.major_ticks.get_window_extents(renderer),
+            *self.minor_ticks.get_window_extents(renderer),
             *self.major_ticklabels.get_window_extents(renderer),
             *self.minor_ticklabels.get_window_extents(renderer),
             self.label.get_window_extent(renderer),
@@ -1119,6 +1175,17 @@ class AxisArtist(martist.Artist):
             return _bbox
         else:
             return None
+
+    def _fully_clipped_to_axes(self):
+        children = [self.major_ticks,
+                    self.minor_ticks,
+                    self.major_ticklabels,
+                    self.minor_ticklabels,
+                    self.label,
+                    self.offsetText]
+
+        return (super()._fully_clipped_to_axes() and
+                any(a._fully_clipped_to_axes() for a in children))
 
     @martist.allow_rasterization
     def draw(self, renderer):
