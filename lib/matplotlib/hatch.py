@@ -11,6 +11,14 @@ class HatchPatternBase:
     pass
 
 
+class CustomHatchPatternBase(HatchPatternBase):
+    """The base class for a custom hatch pattern."""
+
+    def get_path(self):
+        "return a path defined within a unit square."
+        pass
+
+
 class HorizontalHatch(HatchPatternBase):
     def __init__(self, hatch, density):
         self.num_lines = int((hatch.count('-') + hatch.count('+')) * density)
@@ -180,6 +188,9 @@ _hatch_types = [
 
 
 def _validate_hatch_pattern(hatch):
+    if isinstance(hatch, CustomHatchPatternBase):
+        return
+
     valid_hatch_patterns = set(r'-+|/\xXoO.*')
     if hatch is not None:
         invalids = set(hatch).difference(valid_hatch_patterns)
@@ -202,6 +213,10 @@ def get_path(hatchpattern, density=6):
     the hatch in a unit square.  *density* is the number of lines per
     unit square.
     """
+
+    if isinstance(hatchpattern, CustomHatchPatternBase):
+        return hatchpattern.get_path()
+
     density = int(density)
 
     patterns = [hatch_type(hatchpattern, density)
